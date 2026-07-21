@@ -1,0 +1,6 @@
+Métrica,XGBoost Base,XGBoost Espacial,Mejora Absoluta,Mejora (%)
+Macro F1,0.3432,0.4156,+0.0724,+21.09 %
+Balanced Accuracy,0.4346,0.4719,+0.0373,+8.58 %
+MCC Multiclase,0.1346,0.2201,+0.0855,+63.55 %
+ROC-AUC (Macro),0.6989,0.7444,+0.0455,+6.51 %
+PR-AUC (Macro),0.4046,0.4102,+0.0056,+1.40 %
