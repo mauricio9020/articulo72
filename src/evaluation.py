@@ -5,7 +5,7 @@ Scientifically Addresses Reviewer Comments:
 - Point #7: Modern Metrics Hierarchy. Macro F1 is the primary evaluation metric, followed by Balanced Accuracy,
   Recall per class, Multiclass MCC, Macro Precision, ROC-AUC, PR-AUC, and Accuracy (secondary only).
 - Point #8: Calibration Curves, Brier Score & ECE. Calculates per-class Brier Scores, Expected Calibration Error (ECE),
-  and generates Reliability Diagrams.
+  and generates clean, publication-grade Reliability Diagrams.
 - Point #9: Correct Bootstrap. Resamples test set (1000 iterations) reporting Mean, Median, Bias, IC95%, and Std Error.
 - Point #10: Grouped SHAP Interpretability. TreeSHAP values are aggregated back into parent categorical variables
   to eliminate One-Hot dummy clutter. Includes Dependence Plots & explicit disclaimers against causal misinterpretation.
@@ -60,7 +60,6 @@ def calculate_ece(y_true_bin: np.ndarray, y_prob_class: np.ndarray, n_bins: int 
         bin_lower = bin_boundaries[j]
         bin_upper = bin_boundaries[j + 1]
         
-        # Mask for samples falling in bin j
         in_bin = (y_prob_class > bin_lower) & (y_prob_class <= bin_upper)
         if j == 0:
             in_bin = (y_prob_class >= bin_lower) & (y_prob_class <= bin_upper)
@@ -77,14 +76,6 @@ def calculate_ece(y_true_bin: np.ndarray, y_prob_class: np.ndarray, n_bins: int 
 def calculate_per_class_metrics(y_true: np.ndarray, y_pred: np.ndarray, label_encoder: Any) -> Dict[str, Any]:
     """
     Computes per-class recall, precision, and F1-score for each homicide mechanism category.
-    
-    Args:
-        y_true: Ground truth target labels.
-        y_pred: Predicted target labels.
-        label_encoder: Fitted LabelEncoder instance.
-        
-    Returns:
-        Dict mapping class names to per-class metrics.
     """
     classes = label_encoder.classes_
     per_class_recall = recall_score(y_true, y_pred, average=None, zero_division=0)
@@ -108,19 +99,7 @@ def get_performance_metrics(
     label_encoder: Any
 ) -> Tuple[Dict[str, Any], np.ndarray, np.ndarray]:
     """
-    Computes all publication-grade performance metrics for a model on test set.
-    Strictly orders metrics prioritizing Macro F1 (Point #7).
-    
-    Args:
-        name: Name of the model evaluated.
-        model: Fitted pipeline or estimator.
-        X_test: Test feature DataFrame.
-        y_test: Test target labels.
-        train_time: Time taken to train model in seconds.
-        label_encoder: LabelEncoder instance.
-        
-    Returns:
-        Tuple of (metrics_dict, y_pred, y_probs).
+    Computes publication-grade performance metrics for a model on test set.
     """
     logger.info(f"Computing publication metrics for model: {name}")
     
@@ -136,20 +115,17 @@ def get_performance_metrics(
         for i, p in enumerate(y_pred):
             y_probs[i, p] = 1.0
             
-    # Metrics hierarchy (Point #7: Macro F1 is Primary)
     f1_macro = f1_score(y_test, y_pred, average='macro', zero_division=0)
     b_acc = balanced_accuracy_score(y_test, y_pred)
     rec_macro = recall_score(y_test, y_pred, average='macro', zero_division=0)
     mcc = matthews_corrcoef(y_test, y_pred)
     pre_macro = precision_score(y_test, y_pred, average='macro', zero_division=0)
     
-    # ROC AUC (OvR Macro)
     try:
         roc_auc = roc_auc_score(y_test, y_probs, multi_class='ovr', average='macro')
     except Exception:
         roc_auc = np.nan
         
-    # PR AUC (OvR Macro Average Precision)
     try:
         y_test_bin = pd.get_dummies(y_test).values
         pr_auc = average_precision_score(y_test_bin, y_probs, average='macro')
@@ -186,7 +162,7 @@ def get_performance_metrics(
 
 def plot_confusion_matrices(models_predictions: Dict[str, np.ndarray], y_test: np.ndarray, label_encoder: Any) -> None:
     """
-    Plots high-resolution confusion matrix heatmaps (raw counts and normalized proportions).
+    Plots confusion matrix heatmaps (raw counts and normalized proportions).
     """
     logger.info("Plotting publication confusion matrices...")
     classes = label_encoder.classes_
@@ -219,60 +195,182 @@ def plot_confusion_matrices(models_predictions: Dict[str, np.ndarray], y_test: n
 
 def plot_calibration_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, label_encoder: Any) -> Dict[str, Dict[str, Any]]:
     """
-    Computes per-class Brier Scores, Expected Calibration Error (ECE), and plots Calibration Curves / Reliability Diagrams.
-    
-    Args:
-        models_probs: Dict mapping model name to test predicted probability matrix.
-        y_test: Test ground truth labels.
-        label_encoder: Fitted LabelEncoder.
-        
-    Returns:
-        Dict mapping model name to per-class calibration statistics (Brier & ECE).
+    Computes per-class Brier Scores & ECE, and generates clean Reliability Diagrams for 3 key comparison models.
     """
-    logger.info("Plotting calibration curves and computing Brier Scores & ECE...")
+    logger.info("Plotting clean publication calibration curves and computing Brier Scores & ECE...")
     classes = label_encoder.classes_
     n_classes = len(classes)
     
-    fig, axes = plt.subplots(1, n_classes, figsize=(18, 5))
-    if n_classes == 1:
-        axes = [axes]
-        
-    calibration_metrics: Dict[str, Dict[str, Any]] = {name: {} for name in models_probs.keys()}
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+    # Filter 3 key comparison models for visual clarity
+    target_models = [
+        config.MODEL_NAMES['RANDOM_FOREST'],
+        config.MODEL_NAMES['XGB_BASE'],
+        config.MODEL_NAMES['XGB_SPATIAL']
+    ]
     
+    calibration_metrics: Dict[str, Dict[str, Any]] = {name: {} for name in models_probs.keys()}
+    
+    # Pre-compute metrics for ALL models for the CSV report
     for i, c_name in enumerate(classes):
-        axes[i].plot([0, 1], [0, 1], "k:", label="Perfectamente Calibrado")
         y_test_bin = (y_test == i).astype(int)
-        
-        for m_idx, (name, probs) in enumerate(models_probs.items()):
+        for name, probs in models_probs.items():
             prob_class = probs[:, i]
-            frac_pos, mean_pred = calibration_curve(y_test_bin, prob_class, n_bins=10)
-            
             brier = brier_score_loss(y_test_bin, prob_class)
             ece = calculate_ece(y_test_bin, prob_class, n_bins=10)
-            
             calibration_metrics[name][f"{c_name}_Brier"] = float(brier)
             calibration_metrics[name][f"{c_name}_ECE"] = float(ece)
             
-            color = colors[m_idx % len(colors)]
-            axes[i].plot(mean_pred, frac_pos, "s-", color=color, label=f"{name} (Brier={brier:.3f}, ECE={ece:.3f})")
-            
-        axes[i].set_ylabel("Fracción de Positivos Reales")
-        axes[i].set_xlabel("Valor Medio Predicho")
-        axes[i].set_title(f"Calibración: {c_name}")
-        axes[i].legend(loc="lower right", fontsize=8)
-        axes[i].grid(alpha=0.3)
+    fig, axes = plt.subplots(1, n_classes, figsize=(16, 4.8))
+    if n_classes == 1:
+        axes = [axes]
         
-    plt.suptitle("Curvas de Calibración (Diagramas de Confiabilidad) por Clase", fontsize=14)
+    color_map = {
+        config.MODEL_NAMES['RANDOM_FOREST']: '#1f77b4',     # Muted blue
+        config.MODEL_NAMES['XGB_BASE']: '#ff7f0e',          # Vivid orange
+        config.MODEL_NAMES['XGB_SPATIAL']: '#2ca02c'        # Forest green
+    }
+    
+    for i, c_name in enumerate(classes):
+        axes[i].plot([0, 1], [0, 1], "k--", linewidth=1.2, label="Perfect Calibration")
+        y_test_bin = (y_test == i).astype(int)
+        
+        for name in target_models:
+            if name in models_probs:
+                prob_class = models_probs[name][:, i]
+                frac_pos, mean_pred = calibration_curve(y_test_bin, prob_class, n_bins=10)
+                brier = calibration_metrics[name][f"{c_name}_Brier"]
+                ece = calibration_metrics[name][f"{c_name}_ECE"]
+                
+                color = color_map.get(name, '#333333')
+                # Short legend labels for readability
+                short_name = name.replace("Regresión Logística Multinomial", "Logistic Reg.").replace("XGBoost con Covariables Geográficas", "Spatially Enriched XGB").replace("XGBoost Base (No Espacial)", "XGBoost Base")
+                axes[i].plot(mean_pred, frac_pos, "s-", color=color, linewidth=1.8, markersize=5, label=f"{short_name} (ECE={ece:.3f})")
+                
+        axes[i].set_ylabel("Empirical Probability", fontsize=10)
+        axes[i].set_xlabel("Mean Predicted Probability", fontsize=10)
+        axes[i].set_title(f"{c_name}", fontsize=12, fontweight='bold')
+        axes[i].legend(loc="lower right", fontsize=8, frameon=True)
+        axes[i].grid(True, linestyle='--', alpha=0.3)
+        
+    plt.suptitle("Calibration Reliability Diagrams", fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
     path = os.path.join(config.FIGURES_DIR, 'calibration_curves.png')
-    plt.savefig(path, dpi=300)
+    plt.savefig(path, dpi=300, bbox_inches='tight')
     plt.close()
     
     calib_df = pd.DataFrame(calibration_metrics).T
     calib_df.to_csv(os.path.join(config.TABLES_DIR, 'brier_scores.csv'))
-    logger.info(f"Saved calibration curves, Brier Scores & ECE to {path}")
+    logger.info(f"Saved clean calibration curves, Brier Scores & ECE to {path}")
     return calibration_metrics
+
+
+def plot_roc_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, label_encoder: Any) -> None:
+    """
+    Plots clean Multiclass ROC Curves (Macro-Average) comparing 3 key models.
+    """
+    logger.info("Plotting clean publication ROC curves...")
+    target_models = [
+        config.MODEL_NAMES['LOG_REG'],
+        config.MODEL_NAMES['XGB_BASE'],
+        config.MODEL_NAMES['XGB_SPATIAL']
+    ]
+    
+    classes = label_encoder.classes_
+    n_classes = len(classes)
+    y_test_bin = pd.get_dummies(y_test).values
+    
+    color_map = {
+        config.MODEL_NAMES['LOG_REG']: '#1f77b4',
+        config.MODEL_NAMES['XGB_BASE']: '#ff7f0e',
+        config.MODEL_NAMES['XGB_SPATIAL']: '#2ca02c'
+    }
+    
+    plt.figure(figsize=(8, 6))
+    plt.plot([0, 1], [0, 1], 'k--', linewidth=1.2, label='Chance (AUC = 0.50)')
+    
+    for name in target_models:
+        if name in models_probs:
+            probs = models_probs[name]
+            mean_fpr = np.linspace(0, 1, 100)
+            tprs = []
+            
+            for i in range(n_classes):
+                fpr, tpr, _ = roc_curve(y_test_bin[:, i], probs[:, i])
+                tprs.append(np.interp(mean_fpr, fpr, tpr))
+                
+            macro_tpr = np.mean(tprs, axis=0)
+            macro_tpr[0] = 0.0
+            macro_auc = auc(mean_fpr, macro_tpr)
+            
+            color = color_map.get(name, '#333333')
+            short_name = name.replace("Regresión Logística Multinomial", "Logistic Regression").replace("XGBoost con Covariables Geográficas", "Spatially Enriched XGBoost").replace("XGBoost Base (No Espacial)", "XGBoost Base")
+            plt.plot(mean_fpr, macro_tpr, color=color, linewidth=2.2, label=f"{short_name} (AUC = {macro_auc:.3f})")
+            
+    plt.xlabel('False Positive Rate (1 - Specificity)', fontsize=11)
+    plt.ylabel('True Positive Rate (Sensitivity)', fontsize=11)
+    plt.title('Multiclass ROC Curves (Macro-Average)', fontsize=13, fontweight='bold')
+    plt.legend(loc='lower right', fontsize=9, frameon=True)
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.tight_layout()
+    
+    path = os.path.join(config.FIGURES_DIR, 'roc_curves.png')
+    plt.savefig(path, dpi=300)
+    plt.close()
+    logger.info(f"Saved clean ROC curves to {path}")
+
+
+def plot_pr_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, label_encoder: Any) -> None:
+    """
+    Plots clean Multiclass Precision-Recall Curves (Macro-Average) comparing 3 key models.
+    """
+    logger.info("Plotting clean publication Precision-Recall curves...")
+    target_models = [
+        config.MODEL_NAMES['LOG_REG'],
+        config.MODEL_NAMES['XGB_BASE'],
+        config.MODEL_NAMES['XGB_SPATIAL']
+    ]
+    
+    classes = label_encoder.classes_
+    n_classes = len(classes)
+    y_test_bin = pd.get_dummies(y_test).values
+    
+    color_map = {
+        config.MODEL_NAMES['LOG_REG']: '#1f77b4',
+        config.MODEL_NAMES['XGB_BASE']: '#ff7f0e',
+        config.MODEL_NAMES['XGB_SPATIAL']: '#2ca02c'
+    }
+    
+    plt.figure(figsize=(8, 6))
+    
+    for name in target_models:
+        if name in models_probs:
+            probs = models_probs[name]
+            mean_recall = np.linspace(0, 1, 100)
+            precisions = []
+            
+            for i in range(n_classes):
+                precision, recall, _ = precision_recall_curve(y_test_bin[:, i], probs[:, i])
+                # Interpolate precision over ascending recall
+                precisions.append(np.interp(mean_recall, recall[::-1], precision[::-1]))
+                
+            macro_precision = np.mean(precisions, axis=0)
+            macro_auc = auc(mean_recall, macro_precision)
+            
+            color = color_map.get(name, '#333333')
+            short_name = name.replace("Regresión Logística Multinomial", "Logistic Regression").replace("XGBoost con Covariables Geográficas", "Spatially Enriched XGBoost").replace("XGBoost Base (No Espacial)", "XGBoost Base")
+            plt.plot(mean_recall, macro_precision, color=color, linewidth=2.2, label=f"{short_name} (AUC = {macro_auc:.3f})")
+            
+    plt.xlabel('Recall (Sensitivity)', fontsize=11)
+    plt.ylabel('Precision (Positive Predictive Value)', fontsize=11)
+    plt.title('Multiclass Precision-Recall Curves (Macro-Average)', fontsize=13, fontweight='bold')
+    plt.legend(loc='lower left', fontsize=9, frameon=True)
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.tight_layout()
+    
+    path = os.path.join(config.FIGURES_DIR, 'pr_curves.png')
+    plt.savefig(path, dpi=300)
+    plt.close()
+    logger.info(f"Saved clean Precision-Recall curves to {path}")
 
 
 def run_bootstrap_validation(
@@ -283,16 +381,6 @@ def run_bootstrap_validation(
 ) -> Dict[str, Dict[str, Any]]:
     """
     Performs Bootstrap Validation (1000 resamples with replacement) on held-out test set (Point #9).
-    Reports Mean, Median, Bias (Mean - Point Estimate), 95% Confidence Interval, and Std Error.
-    
-    Args:
-        models_dict: Dict of fitted models/pipelines.
-        X_test_dict: Dict of test DataFrames per model.
-        y_test: Ground truth test target array.
-        n_iterations: Number of bootstrap iterations.
-        
-    Returns:
-        Dict of bootstrap statistical distributions per model and metric.
     """
     logger.info(f"Starting Bootstrap Validation ({n_iterations} iterations on test set)...")
     np.random.seed(config.RANDOM_STATE)
@@ -388,8 +476,7 @@ def compute_statistical_comparisons(
     n_bootstrap_diff: int = 200
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Executes McNemar's Test (test set), Wilcoxon Signed-Rank Test (CV folds),
-    and computes 95% Confidence Intervals for pairwise model metric differences Delta Macro F1 (Point #7 & #15).
+    Executes McNemar's Test, Wilcoxon Test, and 95% CIs for model differences.
     """
     logger.info("Computing statistical hypothesis tests & Confidence Intervals for model differences...")
     model_names = list(models_predictions.keys())
@@ -405,11 +492,9 @@ def compute_statistical_comparisons(
             y_pred1 = models_predictions[m1]
             y_pred2 = models_predictions[m2]
             
-            # 1. McNemar Test
             mc_res = run_mcnemar_test(y_test, y_pred1, y_pred2)
             p_mc = mc_res['p_value']
             
-            # 2. Wilcoxon Test on Spatial CV Folds
             if m1 in cv_results and m2 in cv_results:
                 f1_scores1 = cv_results[m1]['f1_scores']
                 f1_scores2 = cv_results[m2]['f1_scores']
@@ -425,7 +510,6 @@ def compute_statistical_comparisons(
                 p_wx = 1.0
                 wx_stat = 0.0
                 
-            # 3. 95% CI for Difference in Macro F1 (Delta F1 = F1_m1 - F1_m2)
             f1_m1_point = f1_score(y_test, y_pred1, average='macro', zero_division=0)
             f1_m2_point = f1_score(y_test, y_pred2, average='macro', zero_division=0)
             delta_point = f1_m1_point - f1_m2_point
@@ -464,7 +548,6 @@ def compute_statistical_comparisons(
                 'wilcoxon_stat': wx_stat,
                 'interpretation': interp
             }
-            logger.info(f"Comparison '{pair_key}': Delta F1={delta_point:.4f} CI95%=[{ci_delta_lower:.4f}, {ci_delta_upper:.4f}], McNemar p={p_mc:.4f}")
             
     with open(os.path.join(config.TABLES_DIR, 'statistical_tests.txt'), 'w', encoding='utf-8') as f:
         f.write("=== PRUEBAS DE HIPÓTESIS ESTADÍSTICAS E INTERVALOS DE CONFIANZA ===\n\n")
@@ -487,7 +570,6 @@ def compute_grouped_shap_explanations(
     """
     Computes TreeSHAP explanations for XGBoost, aggregating One-Hot dummy features back
     into their parent categorical variables (Point #10).
-    Adds SHAP Dependence Plot and explicit disclaimers: SHAP represents marginal feature attribution, NOT causality.
     """
     logger.info("Computing grouped SHAP explanations (TreeSHAP)...")
     
@@ -557,7 +639,6 @@ def compute_grouped_shap_explanations(
         plt.savefig(path, dpi=300)
         plt.close()
         
-    # Generate dependence plot for Coord_Y if present
     if 'Coord_Y' in unique_parents:
         try:
             coord_idx = unique_parents.index('Coord_Y')

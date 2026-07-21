@@ -278,6 +278,8 @@ def main():
     # 11. Plot Curves: Confusion Matrices, Calibration, ROC, PR Curves
     evaluation.plot_confusion_matrices(models_preds, y_test, label_encoder)
     brier_scores = evaluation.plot_calibration_curves(models_probs, y_test, label_encoder)
+    evaluation.plot_roc_curves(models_probs, y_test, label_encoder)
+    evaluation.plot_pr_curves(models_probs, y_test, label_encoder)
     spatial_analysis.generate_spatial_error_map(df_test, y_test, models_preds[config.MODEL_NAMES['XGB_SPATIAL']])
     
     # 12. Bootstrap Validation (1000 iterations)

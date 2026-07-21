@@ -16,5 +16,5 @@
     },
     "best_model": "XGBoost con Covariables Geogr\u00e1ficas",
     "macro_f1_best": 0.415636500916931,
-    "timestamp": "2026-07-18 21:18:21"
+    "timestamp": "2026-07-20 21:02:03"
 }
