@@ -249,10 +249,15 @@ def plot_calibration_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndar
         axes[i].set_xlabel("Mean Predicted Probability", fontsize=10)
         axes[i].set_title(f"{c_name}", fontsize=12, fontweight='bold')
         
-        # Position legend in open space per panel to avoid covering data lines
-        # Panel 0 (Arma de Fuego): lower right is 100% empty (curves stay high)
-        # Panels 1 & 2 (Arma Blanca, Otros): upper left is 100% empty (curves stay low)
-        leg_loc = "lower right" if i == 0 else "upper left"
+        # Legend positioning requested by user:
+        # Arma Blanca: upper left
+        # Arma de Fuego: lower right (esquina derecha abajo)
+        # Otros: upper left
+        if c_name == 'Arma de Fuego':
+            leg_loc = "lower right"
+        else:
+            leg_loc = "upper left"
+            
         axes[i].legend(loc=leg_loc, fontsize=8, framealpha=0.9, frameon=True)
         axes[i].grid(True, linestyle='--', alpha=0.3)
         
