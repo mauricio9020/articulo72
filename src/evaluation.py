@@ -162,35 +162,73 @@ def get_performance_metrics(
 
 def plot_confusion_matrices(models_predictions: Dict[str, np.ndarray], y_test: np.ndarray, label_encoder: Any) -> None:
     """
-    Plots confusion matrix heatmaps (raw counts and normalized proportions).
-    """
-    logger.info("Plotting publication confusion matrices...")
-    classes = label_encoder.classes_
-    n_models = len(models_predictions)
+    Plots high-resolution publication confusion matrices for the 3 primary comparison models:
+    - Logistic Regression
+    - XGBoost Base (No Espacial)
+    - XGBoost con Covariables Geográficas (Spatially Enriched XGBoost)
     
-    fig, axes = plt.subplots(n_models, 2, figsize=(14, 4.5 * n_models))
+    Generates both a combined 3-model publication grid figure and individual model figures.
+    """
+    logger.info("Plotting publication confusion matrices for primary models...")
+    classes = label_encoder.classes_
+    
+    target_models = [
+        config.MODEL_NAMES['LOG_REG'],
+        config.MODEL_NAMES['XGB_BASE'],
+        config.MODEL_NAMES['XGB_SPATIAL']
+    ]
+    
+    # Filter predictions for target models (fallback to available models if missing)
+    filtered_preds = {name: preds for name, preds in models_predictions.items() if name in target_models}
+    if not filtered_preds:
+        filtered_preds = models_predictions
+        
+    n_models = len(filtered_preds)
+    fig, axes = plt.subplots(n_models, 2, figsize=(12, 3.8 * n_models))
     if n_models == 1:
         axes = np.expand_dims(axes, axis=0)
         
-    for idx, (name, y_pred) in enumerate(models_predictions.items()):
+    for idx, (name, y_pred) in enumerate(filtered_preds.items()):
         cm = confusion_matrix(y_test, y_pred)
         cm_norm = confusion_matrix(y_test, y_pred, normalize='true')
         
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes, ax=axes[idx, 0])
-        axes[idx, 0].set_title(f'{name} - Conteos Absolutos')
-        axes[idx, 0].set_ylabel('Real')
-        axes[idx, 0].set_xlabel('Predicho')
+        short_name = name.replace("Regresión Logística Multinomial", "Logistic Regression").replace("XGBoost con Covariables Geográficas", "Spatially Enriched XGBoost").replace("XGBoost Base (No Espacial)", "XGBoost Base")
         
-        sns.heatmap(cm_norm, annot=True, fmt='.2f', cmap='Oranges', xticklabels=classes, yticklabels=classes, ax=axes[idx, 1])
-        axes[idx, 1].set_title(f'{name} - Proporción Normalizada')
-        axes[idx, 1].set_ylabel('Real')
-        axes[idx, 1].set_xlabel('Predicho')
+        # 1. Absolute counts heatmap
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False, xticklabels=classes, yticklabels=classes, ax=axes[idx, 0], annot_kws={"size": 11, "weight": "bold"})
+        axes[idx, 0].set_title(f'{short_name} - Raw Counts', fontsize=11, fontweight='bold')
+        axes[idx, 0].set_ylabel('True Label', fontsize=10)
+        axes[idx, 0].set_xlabel('Predicted Label', fontsize=10)
+        
+        # 2. Normalized proportion heatmap
+        sns.heatmap(cm_norm, annot=True, fmt='.2f', cmap='Oranges', cbar=False, xticklabels=classes, yticklabels=classes, ax=axes[idx, 1], annot_kws={"size": 11, "weight": "bold"})
+        axes[idx, 1].set_title(f'{short_name} - Normalized (Recall)', fontsize=11, fontweight='bold')
+        axes[idx, 1].set_ylabel('True Label', fontsize=10)
+        axes[idx, 1].set_xlabel('Predicted Label', fontsize=10)
+        
+        # Save individual model confusion matrix plot
+        fig_ind, ax_ind = plt.subplots(1, 2, figsize=(11, 4.5))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False, xticklabels=classes, yticklabels=classes, ax=ax_ind[0], annot_kws={"size": 11, "weight": "bold"})
+        ax_ind[0].set_title(f'{short_name} (Counts)', fontsize=11, fontweight='bold')
+        ax_ind[0].set_ylabel('True Label')
+        ax_ind[0].set_xlabel('Predicted Label')
+        
+        sns.heatmap(cm_norm, annot=True, fmt='.2f', cmap='Oranges', cbar=False, xticklabels=classes, yticklabels=classes, ax=ax_ind[1], annot_kws={"size": 11, "weight": "bold"})
+        ax_ind[1].set_title(f'{short_name} (Normalized)', fontsize=11, fontweight='bold')
+        ax_ind[1].set_ylabel('True Label')
+        ax_ind[1].set_xlabel('Predicted Label')
+        
+        plt.tight_layout()
+        safe_name = short_name.replace(" ", "_").replace("(", "").replace(")", "")
+        ind_path = os.path.join(config.FIGURES_DIR, f'confusion_matrix_{safe_name}.png')
+        fig_ind.savefig(ind_path, dpi=300, bbox_inches='tight')
+        plt.close(fig_ind)
         
     plt.tight_layout()
     path = os.path.join(config.FIGURES_DIR, 'confusion_matrices.png')
-    plt.savefig(path, dpi=300)
-    plt.close()
-    logger.info(f"Saved confusion matrices to {path}")
+    fig.savefig(path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    logger.info(f"Saved publication confusion matrices to {path} and individual model files.")
 
 
 def plot_calibration_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, label_encoder: Any) -> Dict[str, Dict[str, Any]]:
