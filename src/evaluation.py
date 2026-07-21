@@ -249,7 +249,7 @@ def plot_calibration_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndar
         axes[i].set_ylabel("Empirical Probability", fontsize=10)
         axes[i].set_xlabel("Mean Predicted Probability", fontsize=10)
         axes[i].set_title(f"{c_name}", fontsize=12, fontweight='bold')
-        axes[i].legend(loc="lower right", fontsize=8, frameon=True)
+        axes[i].legend(loc="upper left", fontsize=8, framealpha=0.9, frameon=True)
         axes[i].grid(True, linestyle='--', alpha=0.3)
         
     plt.suptitle("Calibration Reliability Diagrams", fontsize=14, fontweight='bold', y=1.02)
@@ -309,7 +309,7 @@ def plot_roc_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, lab
     plt.xlabel('False Positive Rate (1 - Specificity)', fontsize=11)
     plt.ylabel('True Positive Rate (Sensitivity)', fontsize=11)
     plt.title('Multiclass ROC Curves (Macro-Average)', fontsize=13, fontweight='bold')
-    plt.legend(loc='lower right', fontsize=9, frameon=True)
+    plt.legend(loc='lower right', fontsize=8.5, framealpha=0.9, frameon=True)
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.tight_layout()
     
@@ -350,7 +350,6 @@ def plot_pr_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, labe
             
             for i in range(n_classes):
                 precision, recall, _ = precision_recall_curve(y_test_bin[:, i], probs[:, i])
-                # Interpolate precision over ascending recall
                 precisions.append(np.interp(mean_recall, recall[::-1], precision[::-1]))
                 
             macro_precision = np.mean(precisions, axis=0)
@@ -363,7 +362,14 @@ def plot_pr_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, labe
     plt.xlabel('Recall (Sensitivity)', fontsize=11)
     plt.ylabel('Precision (Positive Predictive Value)', fontsize=11)
     plt.title('Multiclass Precision-Recall Curves (Macro-Average)', fontsize=13, fontweight='bold')
-    plt.legend(loc='lower left', fontsize=9, frameon=True)
+    plt.legend(loc='upper right', fontsize=8.5, framealpha=0.9, frameon=True)
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.tight_layout()
+    
+    path = os.path.join(config.FIGURES_DIR, 'pr_curves.png')
+    plt.savefig(path, dpi=300)
+    plt.close()
+    logger.info(f"Saved clean Precision-Recall curves to {path}")
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.tight_layout()
     
