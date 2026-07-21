@@ -282,9 +282,9 @@ def main():
     evaluation.plot_pr_curves(models_probs, y_test, label_encoder)
     spatial_analysis.generate_spatial_error_map(df_test, y_test, models_preds[config.MODEL_NAMES['XGB_SPATIAL']])
     
-    # 12. Bootstrap Validation (100 iterations)
+    # 12. Bootstrap Validation (1000 iterations)
     bootstrap_results = evaluation.run_bootstrap_validation(
-        fitted_models, X_test_dict, y_test, n_iterations=100
+        fitted_models, X_test_dict, y_test, n_iterations=1000
     )
     
     # 13. Statistical Hypothesis Tests (McNemar & Wilcoxon)
