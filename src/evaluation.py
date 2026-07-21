@@ -242,14 +242,18 @@ def plot_calibration_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndar
                 ece = calibration_metrics[name][f"{c_name}_ECE"]
                 
                 color = color_map.get(name, '#333333')
-                # Short legend labels for readability
                 short_name = name.replace("Regresión Logística Multinomial", "Logistic Reg.").replace("XGBoost con Covariables Geográficas", "Spatially Enriched XGB").replace("XGBoost Base (No Espacial)", "XGBoost Base")
                 axes[i].plot(mean_pred, frac_pos, "s-", color=color, linewidth=1.8, markersize=5, label=f"{short_name} (ECE={ece:.3f})")
                 
         axes[i].set_ylabel("Empirical Probability", fontsize=10)
         axes[i].set_xlabel("Mean Predicted Probability", fontsize=10)
         axes[i].set_title(f"{c_name}", fontsize=12, fontweight='bold')
-        axes[i].legend(loc="upper left", fontsize=8, framealpha=0.9, frameon=True)
+        
+        # Position legend in open space per panel to avoid covering data lines
+        # Panel 0 (Arma de Fuego): lower right is 100% empty (curves stay high)
+        # Panels 1 & 2 (Arma Blanca, Otros): upper left is 100% empty (curves stay low)
+        leg_loc = "lower right" if i == 0 else "upper left"
+        axes[i].legend(loc=leg_loc, fontsize=8, framealpha=0.9, frameon=True)
         axes[i].grid(True, linestyle='--', alpha=0.3)
         
     plt.suptitle("Calibration Reliability Diagrams", fontsize=14, fontweight='bold', y=1.02)
@@ -363,13 +367,6 @@ def plot_pr_curves(models_probs: Dict[str, np.ndarray], y_test: np.ndarray, labe
     plt.ylabel('Precision (Positive Predictive Value)', fontsize=11)
     plt.title('Multiclass Precision-Recall Curves (Macro-Average)', fontsize=13, fontweight='bold')
     plt.legend(loc='upper right', fontsize=8.5, framealpha=0.9, frameon=True)
-    plt.grid(True, linestyle='--', alpha=0.3)
-    plt.tight_layout()
-    
-    path = os.path.join(config.FIGURES_DIR, 'pr_curves.png')
-    plt.savefig(path, dpi=300)
-    plt.close()
-    logger.info(f"Saved clean Precision-Recall curves to {path}")
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.tight_layout()
     
